@@ -46,43 +46,41 @@ def fetch_google_ads(customer_id: str) -> dict:
         logger.error(f"Ads fetch failed: {str(e)}", exc_info=True)
         return {"error": str(e)}
 
-def fetch_google_analytics(property_id: str) -> dict:
-    json_string = os.getenv("GA_SERVICE_ACCOUNT_JSON")
-    logger.info(f"GA_JSON length: {len(json_string or 'MISSING')}")
-    if not json_string:
-        logger.error("GA_SERVICE_ACCOUNT_JSON env var is missing or empty")
-        return {"error": "GA JSON missing"}
-    try:
-        info = json.loads(json_string)
-        logger.info("JSON parsed successfully - keys: " + ", ".join(info.keys()))
-        credentials = service_account.Credentials.from_service_account_info(info)
-        logger.info("Credentials loaded successfully")
+def fetch_google_analytics(property_id):
+    import os
+    import json
+    from google.oauth2 import service_account
+    
+    # Try environment variable first
+    service_account_json = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+    
+    if service_account_json:
+        # Parse JSON from environment variable
+        credentials_info = json.loads(service_account_json)
+        credentials = service_account.Credentials.from_service_account_info(credentials_info)
         client = BetaAnalyticsDataClient(credentials=credentials)
-        request = RunReportRequest(
-            property=property_id,
-            metrics=[
-                Metric(name="sessions"),
-                Metric(name="activeUsers"),
-                Metric(name="bounceRate"),
-            ],
-            date_ranges=[DateRange(start_date="yesterday", end_date="yesterday")],
-        )
-        response = client.run_report(request)
-        if not response.rows:
-            logger.info("No GA data returned for yesterday")
-            return {"error": "No data for yesterday"}
-        row = response.rows[0]
-        return {
-            "sessions": int(row.metric_values[0].value),
-            "users": int(row.metric_values[1].value),
-            "bounce_rate": float(row.metric_values[2].value) / 100,
-        }
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON decode error: {str(e)}")
-        return {"error": "Invalid JSON format"}
-    except Exception as e:
-        logger.error(f"GA fetch exception: {str(e)}", exc_info=True)
-        return {"error": str(e)}
+        print("✓ Using credentials from environment variable")
+    else:
+        # Fallback to file (for local development)
+        print("⚠ Using file-based credentials")
+        # Try multiple possible locations
+        possible_paths = [
+            'GA_SERVICE_ACCOUNT_JSON',
+            '/app/GA_SERVICE_ACCOUNT_JSON',
+            './GA_SERVICE_ACCOUNT_JSON'
+        ]
+        
+        for file_path in possible_paths:
+            try:
+                client = BetaAnalyticsDataClient.from_service_account_file(file_path)
+                print(f"✓ Found file at: {file_path}")
+                break
+            except:
+                continue
+        else:
+            raise FileNotFoundError("GA_SERVICE_ACCOUNT_JSON not found in any location")
+    
+    # Rest of your existing code continues here...
 
 def combine_metrics(ga: dict, meta: dict, gads: dict) -> dict:
     return {
