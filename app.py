@@ -27,3 +27,4 @@ def get_metrics():
     except Exception as e:
         logger.error(f"Metrics error: {str(e)}")
         return {"error": str(e)}, 500
+# Force redeploy - Wed Feb  4 09:41:05 SAST 2026
