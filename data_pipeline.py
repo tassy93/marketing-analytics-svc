@@ -50,11 +50,11 @@ def fetch_google_analytics(property_id: str) -> dict:
     json_string = os.getenv("GA_SERVICE_ACCOUNT_JSON")
     logger.info(f"GA_JSON length: {len(json_string or 'MISSING')}")
     if not json_string:
-        logger.error("GA_SERVICE_ACCOUNT_JSON is missing or empty")
+        logger.error("GA_SERVICE_ACCOUNT_JSON env var is missing or empty")
         return {"error": "GA JSON missing"}
     try:
         info = json.loads(json_string)
-        logger.info("JSON parsed successfully")
+        logger.info("JSON parsed successfully - keys: " + ", ".join(info.keys()))
         credentials = service_account.Credentials.from_service_account_info(info)
         logger.info("Credentials loaded successfully")
         client = BetaAnalyticsDataClient(credentials=credentials)
@@ -69,7 +69,7 @@ def fetch_google_analytics(property_id: str) -> dict:
         )
         response = client.run_report(request)
         if not response.rows:
-            logger.info("No GA data returned")
+            logger.info("No GA data returned for yesterday")
             return {"error": "No data for yesterday"}
         row = response.rows[0]
         return {
