@@ -1,95 +1,117 @@
+from datetime import datetime, timedelta
+from google.analytics.data_v1beta import BetaAnalyticsDataClient
+from google.analytics.data_v1beta.types import (
+    DateRange,
+    Dimension,
+    Metric,
+    RunReportRequest,
+)
+from google.oauth2 import service_account
 import os
 import json
-import logging
-from dotenv import load_dotenv
-from google.analytics.data_v1beta import BetaAnalyticsDataClient
-from google.analytics.data_v1beta.types import DateRange, Metric, RunReportRequest
-from google.oauth2 import service_account
-from google.ads.googleads.client import GoogleAdsClient
-from google.ads.googleads.errors import GoogleAdsException
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-load_dotenv()
-
-def fetch_google_ads(customer_id: str) -> dict:
-    credentials = {
-        "developer_token": os.getenv("GOOGLE_ADS_DEVELOPER_TOKEN"),
-        "client_id": os.getenv("GOOGLE_ADS_CLIENT_ID"),
-        "client_secret": os.getenv("GOOGLE_ADS_CLIENT_SECRET"),
-        "refresh_token": os.getenv("GOOGLE_ADS_REFRESH_TOKEN"),
-        "login_customer_id": os.getenv("GOOGLE_ADS_LINKED_CUSTOMER_ID"),
-        "use_proto_plus": True,
-    }
-    try:
-        client = GoogleAdsClient.load_from_dict(credentials)
-        ga_service = client.get_service("GoogleAdsService")
-        query = """
-        SELECT
-          metrics.cost_micros,
-          metrics.clicks,
-          metrics.conversions
-        FROM campaign
-        WHERE segments.date DURING YESTERDAY
-        """
-        response = ga_service.search(customer_id=customer_id, query=query)
-        row = next(iter(response), None)
-        if row:
-            return {
-                "cost": row.metrics.cost_micros / 1_000_000,
-                "clicks": row.metrics.clicks,
-                "conversions": row.metrics.conversions,
-            }
-        return {"cost": 0, "clicks": 0, "conversions": 0}
-    except Exception as e:
-        logger.error(f"Ads fetch failed: {str(e)}", exc_info=True)
-        return {"error": str(e)}
 
 def fetch_google_analytics(property_id):
-    import os
-    import json
-    from google.oauth2 import service_account
-    
-    # Try environment variable first
-    service_account_json = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
-    
-    if service_account_json:
-        # Parse JSON from environment variable
-        credentials_info = json.loads(service_account_json)
-        credentials = service_account.Credentials.from_service_account_info(credentials_info)
-        client = BetaAnalyticsDataClient(credentials=credentials)
-        print("✓ Using credentials from environment variable")
-    else:
-        # Fallback to file (for local development)
-        print("⚠ Using file-based credentials")
-        # Try multiple possible locations
-        possible_paths = [
-            'GA_SERVICE_ACCOUNT_JSON',
-            '/app/GA_SERVICE_ACCOUNT_JSON',
-            './GA_SERVICE_ACCOUNT_JSON'
-        ]
+    """Fetch Google Analytics 4 data."""
+    try:
+        if not property_id:
+            print("❌ No property ID provided")
+            return {"error": "No Google Analytics property ID provided"}
         
-        for file_path in possible_paths:
-            try:
-                client = BetaAnalyticsDataClient.from_service_account_file(file_path)
-                print(f"✓ Found file at: {file_path}")
-                break
-            except:
-                continue
+        print(f"🔍 Fetching GA4 data for property: {property_id}")
+        
+        # Get credentials from environment variable or file
+        service_account_json = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+        
+        if service_account_json:
+            # Parse JSON from environment variable
+            credentials_info = json.loads(service_account_json)
+            credentials = service_account.Credentials.from_service_account_info(credentials_info)
+            client = BetaAnalyticsDataClient(credentials=credentials)
+            print("✓ Using credentials from environment variable")
         else:
-            raise FileNotFoundError("GA_SERVICE_ACCOUNT_JSON not found in any location")
+            # Fallback to file
+            print("⚠ Using file-based credentials")
+            client = BetaAnalyticsDataClient.from_service_account_file('/app/GA_SERVICE_ACCOUNT_JSON')
+        
+        # Create request
+        request = RunReportRequest(
+            property=f"properties/{property_id}",
+            dimensions=[Dimension(name="date")],
+            metrics=[Metric(name="activeUsers")],
+            date_ranges=[DateRange(start_date="7daysAgo", end_date="today")],
+        )
+        
+        # Make API call
+        print(f"📊 Making API request to GA4...")
+        response = client.run_report(request)
+        
+        if not response or not hasattr(response, 'rows') or not response.rows:
+            print("⚠ No data returned from GA4 API")
+            return {"data": [], "total_users": 0, "message": "No data available"}
+        
+        print(f"✅ Received {len(response.rows)} rows from GA4")
+        
+        # Process response
+        result = []
+        total_users = 0
+        
+        for row in response.rows:
+            date = row.dimension_values[0].value
+            users = int(row.metric_values[0].value)
+            total_users += users
+            
+            result.append({
+                "date": date,
+                "active_users": users
+            })
+        
+        return {
+            "data": result,
+            "total_users": total_users,
+            "property_id": property_id,
+            "row_count": len(result),
+            "status": "success"
+        }
+        
+    except Exception as e:
+        print(f"❌ Error in fetch_google_analytics: {str(e)}")
+        return {"error": str(e), "property_id": property_id, "status": "error"}
+
+def fetch_google_ads(customer_id):
+    """Fetch Google Ads data (placeholder)."""
+    if not customer_id:
+        return {"data": [], "message": "No Google Ads customer ID provided", "status": "skipped"}
     
-    # Rest of your existing code continues here...
+    print(f"🔍 Fetching Google Ads data for customer: {customer_id}")
+    # This is a placeholder - implement actual Google Ads API call here
+    return {"data": [], "message": "Google Ads integration not yet implemented", "status": "placeholder"}
 
 def combine_metrics(ga: dict, meta: dict, gads: dict) -> dict:
-    return {
-        "date": "yesterday",
-        "sessions": ga.get("sessions", 0),
-        "users": ga.get("users", 0),
-        "bounce_rate": ga.get("bounce_rate", 0),
-        "ad_spend": gads.get("cost", 0),
-        "clicks": gads.get("clicks", 0),
-        "conversions": gads.get("conversions", 0),
-        "error": ga.get("error") or gads.get("error")
+    """Combine metrics from different sources."""
+    print(f"🔗 Combining metrics...")
+    
+    # Handle None values
+    if ga is None:
+        ga = {"error": "GA data is None", "status": "error"}
+    if gads is None:
+        gads = {"error": "Ads data is None", "status": "error"}
+    
+    # If we have errors in GA data, log them
+    if isinstance(ga, dict) and ga.get("status") == "error":
+        print(f"⚠ GA data has error: {ga.get('error')}")
+    
+    # If we have errors in Ads data, log them
+    if isinstance(gads, dict) and gads.get("status") == "error":
+        print(f"⚠ Ads data has error: {gads.get('error')}")
+    
+    # Combine the data
+    combined = {
+        "google_analytics": ga,
+        "google_ads": gads,
+        "metadata": meta,
+        "timestamp": datetime.now().isoformat(),
+        "combined_status": "success" if ga.get("status") == "success" else "partial"
     }
+    
+    print(f"✅ Combined metrics successfully")
+    return combined
