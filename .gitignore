@@ -1,27 +1,2 @@
-# Byte‑compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Virtual environment
-venv/
-.env/
-ENV/
-env/
-
-# Distribution / packaging
-build/
-dist/
-*.egg-info/
-
-# IDE / editor folders
-.vscode/
-.idea/
-*.swp
-
-# OS files
-.DS_Store
-Thumbs.db
-.env
-# Secrets
 ga_service_account.json
+*.json
