@@ -1,13 +1,13 @@
 import os
+import json
 from dotenv import load_dotenv
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import DateRange, Metric, RunReportRequest
+from google.oauth2 import service_account
 from google.ads.googleads.client import GoogleAdsClient
 from google.ads.googleads.errors import GoogleAdsException
 
 load_dotenv()
-
-GA_JSON_PATH = os.getenv("GOOGLE_ANALYTICS_JSON", "ga_service_account.json")
 
 def fetch_google_ads(customer_id: str) -> dict:
     credentials = {
@@ -44,7 +44,15 @@ def fetch_google_ads(customer_id: str) -> dict:
         return {"error": str(ex)}
 
 def fetch_google_analytics(property_id: str) -> dict:
-    client = BetaAnalyticsDataClient.from_service_account_file(GA_JSON_PATH)
+    json_string = os.getenv("GA_SERVICE_ACCOUNT_JSON")
+    if not json_string:
+        return {"error": "No GA JSON provided"}
+    try:
+        info = json.loads(json_string)
+    except json.JSONDecodeError:
+        return {"error": "Invalid GA JSON format"}
+    credentials = service_account.Credentials.from_service_account_info(info)
+    client = BetaAnalyticsDataClient(credentials=credentials)
     request = RunReportRequest(
         property=property_id,
         metrics=[
