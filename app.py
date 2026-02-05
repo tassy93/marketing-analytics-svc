@@ -81,3 +81,4 @@ def get_metrics():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8080)
+# Redeploy trigger - Thu Feb  5 10:35:09 SAST 2026
